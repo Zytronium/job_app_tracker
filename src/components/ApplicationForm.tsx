@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type { ApplicationStatus, JobApplication } from '@/types'
+import type { ApplicationStatus, EmploymentType, JobApplication, LocationType, PayType } from '@/types'
 
 const STATUS_OPTIONS: ApplicationStatus[] = [
   'Applied',
@@ -12,12 +12,26 @@ const STATUS_OPTIONS: ApplicationStatus[] = [
   'Withdrawn',
 ]
 
+const PAY_TYPE_OPTIONS: PayType[] = ['Hourly', 'Salary', 'Commission', 'Other']
+const EMPLOYMENT_TYPE_OPTIONS: EmploymentType[] = ['Full-Time', 'Part-Time', 'Contract', 'Internship', 'Other']
+const LOCATION_TYPE_OPTIONS: LocationType[] = ['On-Site', 'Hybrid', 'Remote', 'Other']
+const JOB_MATCH_OPTIONS = [1, 2, 3, 4, 5] as const
+
 interface FormData {
   companyName: string
   positionName: string
   dateApplied: string
   jobDescriptionSummary: string
-  salarySpecified: string
+  payRangeMin: string
+  payRangeMax: string
+  payType: PayType | ''
+  employmentType: EmploymentType | ''
+  locationType: LocationType | ''
+  location: string
+  duration: string
+  benefits: string        // comma-separated for input
+  jobTags: string         // comma-separated for input
+  jobMatch: number | ''
   extraNotes: string
   status: ApplicationStatus
 }
@@ -27,14 +41,63 @@ const emptyForm: FormData = {
   positionName: '',
   dateApplied: new Date().toISOString().split('T')[0],
   jobDescriptionSummary: '',
-  salarySpecified: '',
+  payRangeMin: '',
+  payRangeMax: '',
+  payType: '',
+  employmentType: '',
+  locationType: '',
+  location: '',
+  duration: '',
+  benefits: '',
+  jobTags: '',
+  jobMatch: '',
   extraNotes: '',
   status: 'Applied',
 }
 
+function appToForm(app: JobApplication): FormData {
+  return {
+    companyName: app.companyName,
+    positionName: app.positionName,
+    dateApplied: app.dateApplied,
+    jobDescriptionSummary: app.jobDescriptionSummary ?? '',
+    payRangeMin: app.payRange?.[0] != null ? String(app.payRange[0]) : '',
+    payRangeMax: app.payRange?.[1] != null ? String(app.payRange[1]) : '',
+    payType: app.payType ?? '',
+    employmentType: app.employmentType ?? '',
+    locationType: app.locationType ?? '',
+    location: app.location ?? '',
+    duration: app.duration ?? '',
+    benefits: app.benefits?.join(', ') ?? '',
+    jobTags: app.jobTags?.join(', ') ?? '',
+    jobMatch: app.jobMatch ?? '',
+    extraNotes: app.extraNotes ?? '',
+    status: app.status,
+  }
+}
+
+/** Parse form data back into the shape onSave expects */
+export interface ApplicationFormOutput {
+  companyName: string
+  positionName: string
+  dateApplied: string
+  jobDescriptionSummary: string
+  payRange?: number[]
+  payType?: PayType
+  employmentType?: EmploymentType
+  locationType?: LocationType
+  location?: string
+  duration?: string
+  benefits?: string[]
+  jobTags?: string[]
+  jobMatch?: number
+  extraNotes: string
+  status: ApplicationStatus
+}
+
 interface ApplicationFormProps {
   editing: JobApplication | null
-  onSave: (data: FormData) => void
+  onSave: (data: ApplicationFormOutput) => void
   onClose: () => void
 }
 
@@ -44,19 +107,7 @@ export default function ApplicationForm({ editing, onSave, onClose }: Applicatio
   const firstInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (editing) {
-      setForm({
-        companyName: editing.companyName,
-        positionName: editing.positionName,
-        dateApplied: editing.dateApplied,
-        jobDescriptionSummary: editing.jobDescriptionSummary ?? '',
-        salarySpecified: editing.salarySpecified ?? '',
-        extraNotes: editing.extraNotes ?? '',
-        status: editing.status,
-      })
-    } else {
-      setForm(emptyForm)
-    }
+    setForm(editing ? appToForm(editing) : emptyForm)
     setErrors({})
   }, [editing])
 
@@ -80,21 +131,64 @@ export default function ApplicationForm({ editing, onSave, onClose }: Applicatio
     if (!form.companyName.trim()) newErrors.companyName = 'Company name is required'
     if (!form.positionName.trim()) newErrors.positionName = 'Position name is required'
     if (!form.dateApplied) newErrors.dateApplied = 'Date applied is required'
+
+    const min = form.payRangeMin !== '' ? parseFloat(form.payRangeMin) : NaN
+    const max = form.payRangeMax !== '' ? parseFloat(form.payRangeMax) : NaN
+
+    if (form.payRangeMin !== '' && (isNaN(min) || min < 0)) {
+      newErrors.payRangeMin = 'Must be a positive number'
+    }
+    if (form.payRangeMax !== '' && (isNaN(max) || max < 0)) {
+      newErrors.payRangeMax = 'Must be a positive number'
+    }
+    if (!isNaN(min) && !isNaN(max) && max < min) {
+      newErrors.payRangeMax = 'Max must be ≥ min'
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (validate()) {
-      onSave(form)
-    }
+    if (!validate()) return
+
+    const min = form.payRangeMin !== '' ? parseFloat(form.payRangeMin) : NaN
+    const max = form.payRangeMax !== '' ? parseFloat(form.payRangeMax) : NaN
+
+    const payRange: number[] | undefined =
+      !isNaN(min) && !isNaN(max) ? [min, max]
+      : !isNaN(min) ? [min]
+      : undefined
+
+    const splitTrimmed = (s: string) =>
+      s.split(',').map(v => v.trim()).filter(Boolean)
+
+    onSave({
+      companyName: form.companyName.trim(),
+      positionName: form.positionName.trim(),
+      dateApplied: form.dateApplied,
+      jobDescriptionSummary: form.jobDescriptionSummary.trim(),
+      payRange,
+      payType: form.payType || undefined,
+      employmentType: form.employmentType || undefined,
+      locationType: form.locationType || undefined,
+      location: form.location.trim() || undefined,
+      duration: form.duration.trim() || undefined,
+      benefits: form.benefits ? splitTrimmed(form.benefits) : undefined,
+      jobTags: form.jobTags ? splitTrimmed(form.jobTags) : undefined,
+      jobMatch: form.jobMatch !== '' ? Number(form.jobMatch) : undefined,
+      extraNotes: form.extraNotes.trim(),
+      status: form.status,
+    })
   }
 
-  function update(field: keyof FormData, value: string) {
+  function update<K extends keyof FormData>(field: K, value: FormData[K]) {
     setForm(prev => ({ ...prev, [field]: value }))
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: undefined }))
   }
+
+  const payTypeSuffix = form.payType === 'Hourly' ? '/ hr' : form.payType === 'Salary' ? '/ yr' : ''
 
   return (
     <div
@@ -119,7 +213,7 @@ export default function ApplicationForm({ editing, onSave, onClose }: Applicatio
           border: '1px solid var(--color-border)',
           borderRadius: '16px',
           width: '100%',
-          maxWidth: '560px',
+          maxWidth: '600px',
           maxHeight: '90vh',
           overflowY: 'auto',
           boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(232,169,48,0.06)',
@@ -183,7 +277,7 @@ export default function ApplicationForm({ editing, onSave, onClose }: Applicatio
         <form onSubmit={handleSubmit} style={{ padding: '24px 28px 28px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-            {/* Company + Position row */}
+            {/* Company + Position */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <Field label="Company Name" required error={errors.companyName}>
                 <input
@@ -206,7 +300,7 @@ export default function ApplicationForm({ editing, onSave, onClose }: Applicatio
               </Field>
             </div>
 
-            {/* Date + Status row */}
+            {/* Date + Status */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <Field label="Date Applied" required error={errors.dateApplied}>
                 <input
@@ -230,25 +324,177 @@ export default function ApplicationForm({ editing, onSave, onClose }: Applicatio
               </Field>
             </div>
 
-            {/* Salary */}
-            <Field label="Salary Specified">
+            {/* Pay Range */}
+            <SectionLabel>Compensation</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginTop: '-8px' }}>
+              <Field label={`Pay Min${payTypeSuffix ? ' (' + payTypeSuffix + ')' : ''}`} error={errors.payRangeMin}>
+                <div style={{ position: 'relative' }}>
+                  <span style={{
+                    position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)',
+                    color: 'var(--color-text-muted)', fontSize: '13px', pointerEvents: 'none',
+                  }}>$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    className="form-input"
+                    style={{ paddingLeft: '22px' }}
+                    placeholder="80,000"
+                    value={form.payRangeMin}
+                    onChange={e => update('payRangeMin', e.target.value)}
+                  />
+                </div>
+              </Field>
+              <Field label={`Pay Max${payTypeSuffix ? ' (' + payTypeSuffix + ')' : ''}`} error={errors.payRangeMax}>
+                <div style={{ position: 'relative' }}>
+                  <span style={{
+                    position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)',
+                    color: 'var(--color-text-muted)', fontSize: '13px', pointerEvents: 'none',
+                  }}>$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    className="form-input"
+                    style={{ paddingLeft: '22px' }}
+                    placeholder="110,000"
+                    value={form.payRangeMax}
+                    onChange={e => update('payRangeMax', e.target.value)}
+                  />
+                </div>
+              </Field>
+              <Field label="Pay Type">
+                <select
+                  className="form-input"
+                  value={form.payType}
+                  onChange={e => update('payType', e.target.value as PayType | '')}
+                >
+                  <option value="">— Select —</option>
+                  {PAY_TYPE_OPTIONS.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            {/* Employment + Location */}
+            <SectionLabel>Role Details</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '-8px' }}>
+              <Field label="Employment Type">
+                <select
+                  className="form-input"
+                  value={form.employmentType}
+                  onChange={e => update('employmentType', e.target.value as EmploymentType | '')}
+                >
+                  <option value="">— Select —</option>
+                  {EMPLOYMENT_TYPE_OPTIONS.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Location Type">
+                <select
+                  className="form-input"
+                  value={form.locationType}
+                  onChange={e => update('locationType', e.target.value as LocationType | '')}
+                >
+                  <option value="">— Select —</option>
+                  {LOCATION_TYPE_OPTIONS.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Location">
               <input
                 type="text"
                 className="form-input"
-                placeholder="e.g. $120,000 or $90k–$110k / year"
-                value={form.salarySpecified}
-                onChange={e => update('salarySpecified', e.target.value)}
+                  placeholder="e.g. Tulsa, OK"
+                  value={form.location}
+                  onChange={e => update('location', e.target.value)}
               />
             </Field>
+              <Field label="Duration">
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. 6-month contract"
+                  value={form.duration}
+                  onChange={e => update('duration', e.target.value)}
+                />
+              </Field>
+            </div>
+
+            {/* Job Match */}
+            <Field label="Job Match">
+              <div style={{ display: 'flex', gap: '8px', paddingTop: '2px' }}>
+                {JOB_MATCH_OPTIONS.map(n => {
+                  const selected = form.jobMatch === n
+                  const color = selected ? MATCH_COLORS[n] : 'var(--color-border)'
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => update('jobMatch', selected ? '' : n)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 0',
+                        border: `1px solid ${color}`,
+                        borderRadius: '6px',
+                        background: selected ? `${color}1A` : 'transparent',
+                        color: selected ? color : 'var(--color-text-muted)',
+                        fontSize: '12px',
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: selected ? 600 : 400,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {n}
+                    </button>
+                  )
+                })}
+              </div>
+              {form.jobMatch !== '' && (
+                <span style={{ fontSize: '12px', color: MATCH_COLORS[form.jobMatch as number], marginTop: '4px' }}>
+                  {MATCH_LABELS[form.jobMatch as number]}
+                </span>
+              )}
+            </Field>
+
+            {/* Tags + Benefits */}
+            <SectionLabel>Tags & Benefits</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '-8px' }}>
+              <Field label="Job Tags">
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="python, web dev, databases"
+                  value={form.jobTags}
+                  onChange={e => update('jobTags', e.target.value)}
+                />
+              </Field>
+              <Field label="Benefits">
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="401k, health, PTO"
+                  value={form.benefits}
+                  onChange={e => update('benefits', e.target.value)}
+                />
+              </Field>
+            </div>
+            <p style={{ margin: '-12px 0 0', fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+              Separate multiple values with commas
+            </p>
 
             {/* Job Description */}
-            <Field label="Job Description Summary">
+            <SectionLabel>Notes</SectionLabel>
+            <Field label="Job Description Summary" error={undefined}>
               <textarea
                 className="form-input"
                 placeholder="Paste key responsibilities, requirements, or notes about the role..."
                 value={form.jobDescriptionSummary}
                 onChange={e => update('jobDescriptionSummary', e.target.value)}
                 rows={4}
+                style={{ marginTop: '-8px' }}
               />
             </Field>
 
@@ -305,6 +551,35 @@ export default function ApplicationForm({ editing, onSave, onClose }: Applicatio
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+// Helpers
+
+const MATCH_LABELS: Record<number, string> = {
+  1: 'Poor', 2: 'Fair', 3: 'Good', 4: 'Great', 5: 'Perfect',
+}
+
+const MATCH_COLORS: Record<number, string> = {
+  1: '#E05252', 2: '#E07B2A', 3: '#E8A930', 4: '#6BBD8C', 5: '#63e1df',
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: '11px',
+        fontFamily: 'var(--font-mono)',
+        letterSpacing: '0.1em',
+        textTransform: 'uppercase',
+        color: 'var(--color-text-muted)',
+        borderBottom: '1px solid var(--color-border-subtle)',
+        paddingBottom: '8px',
+        marginBottom: '-4px',
+      }}
+    >
+      {children}
     </div>
   )
 }

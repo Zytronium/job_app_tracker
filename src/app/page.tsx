@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ApplicationStatus, JobApplication, SortDirection, SortField } from '@/types'
+import type { ApplicationFormOutput } from '@/components/ApplicationForm'
 import { generateId, loadApplications, saveApplications } from '@/lib/storage'
 import ApplicationCard from '@/components/ApplicationCard'
 import ApplicationForm from '@/components/ApplicationForm'
@@ -32,15 +33,7 @@ export default function Home() {
     setMounted(true)
   }, [])
 
-  function handleSave(formData: {
-    companyName: string
-    positionName: string
-    dateApplied: string
-    jobDescriptionSummary: string
-    salarySpecified: string
-    extraNotes: string
-    status: ApplicationStatus
-  }) {
+  function handleSave(formData: ApplicationFormOutput) {
     const now = new Date().toISOString()
     let updated: JobApplication[]
 
@@ -49,9 +42,20 @@ export default function Home() {
         app.id === editingApp.id
           ? {
               ...app,
-              ...formData,
+              companyName: formData.companyName,
+              positionName: formData.positionName,
+              dateApplied: formData.dateApplied,
+              status: formData.status,
               jobDescriptionSummary: formData.jobDescriptionSummary || undefined,
-              salarySpecified: formData.salarySpecified || undefined,
+              payRange: formData.payRange,
+              payType: formData.payType,
+              employmentType: formData.employmentType,
+              locationType: formData.locationType,
+              location: formData.location,
+              duration: formData.duration,
+              benefits: formData.benefits,
+              jobTags: formData.jobTags,
+              jobMatch: formData.jobMatch,
               extraNotes: formData.extraNotes || undefined,
               updatedAt: now,
             }
@@ -63,10 +67,18 @@ export default function Home() {
         companyName: formData.companyName,
         positionName: formData.positionName,
         dateApplied: formData.dateApplied,
-        jobDescriptionSummary: formData.jobDescriptionSummary || undefined,
-        salarySpecified: formData.salarySpecified || undefined,
-        extraNotes: formData.extraNotes || undefined,
         status: formData.status,
+        jobDescriptionSummary: formData.jobDescriptionSummary || undefined,
+        payRange: formData.payRange,
+        payType: formData.payType,
+        employmentType: formData.employmentType,
+        locationType: formData.locationType,
+        location: formData.location,
+        duration: formData.duration,
+        benefits: formData.benefits,
+        jobTags: formData.jobTags,
+        jobMatch: formData.jobMatch,
+        extraNotes: formData.extraNotes || undefined,
         createdAt: now,
         updatedAt: now,
       }
@@ -118,13 +130,14 @@ export default function Home() {
           a.companyName.toLowerCase().includes(q) ||
           a.positionName.toLowerCase().includes(q) ||
           a.jobDescriptionSummary?.toLowerCase().includes(q) ||
-          a.extraNotes?.toLowerCase().includes(q)
+          a.extraNotes?.toLowerCase().includes(q) ||
+          a.jobTags?.some(tag => tag.toLowerCase().includes(q))
       )
     }
 
     result.sort((a, b) => {
-      let valA: string = a[sortField] ?? ''
-      let valB: string = b[sortField] ?? ''
+      const valA: string = a[sortField] ?? ''
+      const valB: string = b[sortField] ?? ''
       const cmp = valA.localeCompare(valB)
       return sortDir === 'asc' ? cmp : -cmp
     })
@@ -272,7 +285,7 @@ export default function Home() {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Search company, role, notes..."
+                placeholder="Search company, role, tags, notes..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{ paddingLeft: '36px' }}

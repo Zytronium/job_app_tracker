@@ -1,6 +1,7 @@
 'use client'
 
-import type { JobApplication } from '@/types'
+import { useState } from 'react'
+import type { JobApplication, PayType } from '@/types'
 import StatusBadge from './StatusBadge'
 
 interface ApplicationCardProps {
@@ -18,30 +19,70 @@ function formatDate(dateStr: string): string {
   })
 }
 
-function formatSalary(salary: string): string {
-  // If it looks like a number, format it
-  const clean = salary.replace(/[$,\s]/g, '')
-  const num = parseFloat(clean)
-  if (!isNaN(num) && num > 1000) {
+function formatCurrency(num: number): string {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       maximumFractionDigits: 0,
     }).format(num)
   }
-  return salary
+
+function formatPayRange(payRange?: number[], payType?: PayType): string | null {
+  if (!payRange || payRange.length === 0) return null
+
+  const suffix =
+    payType === 'Hourly' ? ' / hr'
+    : payType === 'Salary' ? ' / yr'
+    : ''
+
+  if (payRange.length === 1 || payRange[0] === payRange[1]) {
+    return `${formatCurrency(payRange[0])}${suffix}`
+  }
+  return `${formatCurrency(payRange[0])} – ${formatCurrency(payRange[1])}${suffix}`
+}
+
+const MATCH_LABELS: Record<number, string> = {
+  1: 'Poor',
+  2: 'Fair',
+  3: 'Good',
+  4: 'Great',
+  5: 'Perfect',
+}
+
+const MATCH_COLORS: Record<number, string> = {
+  1: '#E05252',
+  2: '#E07B2A',
+  3: '#E8A930',
+  4: '#6BBD8C',
+  5: '#63e1df',
 }
 
 export default function ApplicationCard({ application, onEdit, onDelete }: ApplicationCardProps) {
+  const [expanded, setExpanded] = useState(false)
+
   const {
     companyName,
     positionName,
     dateApplied,
     jobDescriptionSummary,
-    salarySpecified,
+    payRange,
+    payType,
     extraNotes,
     status,
+    location,
+    locationType,
+    employmentType,
+    duration,
+    benefits,
+    jobTags,
+    jobMatch,
   } = application
+
+  const formattedPay = formatPayRange(payRange, payType)
+
+  const hasExpandableContent =
+    location || locationType || employmentType || duration ||
+    (benefits && benefits.length > 0) || (jobTags && jobTags.length > 0) || jobMatch
 
   return (
     <div
@@ -56,6 +97,7 @@ export default function ApplicationCard({ application, onEdit, onDelete }: Appli
         gap: '16px',
         position: 'relative',
         overflow: 'hidden',
+        transition: 'border-color 0.2s ease',
       }}
     >
       {/* Top accent line */}
@@ -113,6 +155,7 @@ export default function ApplicationCard({ application, onEdit, onDelete }: Appli
 
       {/* Meta row */}
       <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+        {/* Date */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -125,7 +168,8 @@ export default function ApplicationCard({ application, onEdit, onDelete }: Appli
           </span>
         </div>
 
-        {salarySpecified && (
+        {/* Pay */}
+        {formattedPay && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="1" x2="12" y2="23" />
@@ -139,7 +183,33 @@ export default function ApplicationCard({ application, onEdit, onDelete }: Appli
                 fontWeight: 500,
               }}
             >
-              {formatSalary(salarySpecified)}
+              {formattedPay}
+            </span>
+          </div>
+        )}
+
+        {/* Employment type */}
+        {employmentType && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+              <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+            </svg>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              {employmentType}
+            </span>
+          </div>
+        )}
+
+        {/* Location */}
+        {(location || locationType) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              {[location, locationType].filter(Boolean).join(' · ')}
             </span>
           </div>
         )}
@@ -163,6 +233,105 @@ export default function ApplicationCard({ application, onEdit, onDelete }: Appli
         </p>
       )}
 
+      {/* Tags */}
+      {jobTags && jobTags.length > 0 && (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {jobTags.map(tag => (
+            <span
+              key={tag}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                color: 'var(--color-text-muted)',
+                background: 'var(--color-surface-elevated)',
+                border: '1px solid var(--color-border-subtle)',
+                borderRadius: '4px',
+                padding: '2px 7px',
+                letterSpacing: '0.03em',
+              }}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Expanded section */}
+      {expanded && hasExpandableContent && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            paddingTop: '4px',
+            borderTop: '1px solid var(--color-border-subtle)',
+          }}
+        >
+          {/* Job Match */}
+          {jobMatch && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Job Match
+              </span>
+              <div style={{ display: 'flex', gap: '3px' }}>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <div
+                    key={n}
+                    style={{
+                      width: '20px',
+                      height: '4px',
+                      borderRadius: '2px',
+                      background: n <= jobMatch ? MATCH_COLORS[jobMatch] : 'var(--color-border)',
+                      transition: 'background 0.2s',
+                    }}
+                  />
+                ))}
+              </div>
+              <span style={{ fontSize: '12px', color: MATCH_COLORS[jobMatch], fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                {MATCH_LABELS[jobMatch]}
+              </span>
+            </div>
+          )}
+
+          {/* Duration */}
+          {duration && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
+                Duration
+              </span>
+              <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{duration}</span>
+            </div>
+          )}
+
+          {/* Benefits */}
+          {benefits && benefits.length > 0 && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0, paddingTop: '2px' }}>
+                Benefits
+              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                {benefits.map(b => (
+                  <span
+                    key={b}
+                    style={{
+                      fontSize: '11px',
+                      color: '#4CAF6E',
+                      background: 'rgba(76, 175, 110, 0.1)',
+                      border: '1px solid rgba(76, 175, 110, 0.25)',
+                      borderRadius: '4px',
+                      padding: '2px 7px',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    {b}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Notes */}
       {extraNotes && (
         <div
@@ -181,14 +350,54 @@ export default function ApplicationCard({ application, onEdit, onDelete }: Appli
               lineHeight: 1.5,
               fontStyle: 'italic',
               display: '-webkit-box',
-              WebkitLineClamp: 2,
+              WebkitLineClamp: expanded ? undefined : 2,
               WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
+              overflow: expanded ? 'visible' : 'hidden',
             }}
           >
             {extraNotes}
           </p>
         </div>
+      )}
+
+      {/* Show more / Collapse */}
+      {hasExpandableContent && (
+        <button
+          onClick={() => setExpanded(prev => !prev)}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            color: 'var(--color-text-muted)',
+            fontSize: '12px',
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.04em',
+            marginTop: '-4px',
+            width: 'fit-content',
+            transition: 'color 0.15s ease',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-accent)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-muted)' }}
+        >
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          {expanded ? 'collapse' : 'show more'}
+        </button>
       )}
 
       {/* Actions */}
