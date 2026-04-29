@@ -201,7 +201,7 @@ export default function Home() {
                   fontWeight: 300,
                 }}
               >
-                Track your jpb search. Every application, one place.
+                Track your job search. Every application in one place.
               </p>
             </div>
 
